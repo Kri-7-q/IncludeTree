@@ -16,7 +16,6 @@ private:
 };
 
 void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out);
-QStringList readFile(const QString &filepath);
 
 int main(int argc, char *argv[])
 {
@@ -62,11 +61,19 @@ int main(int argc, char *argv[])
 void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out)
 {
     // print filename
-    out << QString(depth, QChar(' ')) << filename << '\n';
+    out << "\033[34m" << QString(depth, QChar(' ')) << filename << "\033[0m\n";
     // Search in file
-    QStringList content = readFile(filepath + '/' + filename);
-    for (QString line : content)
+    QFile file(filepath + '/' + filename);
+    if (!file.open(QIODevice::ReadOnly))
     {
+        QFileInfo fileInfo(file);
+        throw ReadFileException(QString("Konnte Datei '%1' nicht öffnen!").arg(fileInfo.filePath()));
+    }
+    QTextStream inStream(&file);
+    QStringList content;
+    while (!inStream.atEnd())
+    {
+        QString line = inStream.readLine();
         int index = line.indexOf(QChar('#'));
         if (index == 0)
             continue;
@@ -95,28 +102,5 @@ void parseFile(const QString &filepath, const QString &filename, const QStringLi
             }
         }
     }
-}
-
-/*!
- * \brief Liest den ganzen Inhalt eines Files zeilenweise in eine QStringList.
- * \param filepath
- * \return
- */
-QStringList readFile(const QString &filepath)
-{
-    QFile file(filepath);
-    if (!file.open(QIODevice::ReadOnly))
-    {
-        QFileInfo fileInfo(file);
-        throw ReadFileException(QString("Konnte Datei '%1' nicht öffnen!").arg(fileInfo.filePath()));
-    }
-    QTextStream inStream(&file);
-    QStringList content;
-    while (!inStream.atEnd())
-    {
-        content << inStream.readLine();
-    }
     file.close();
-
-    return content;
 }
