@@ -1,8 +1,22 @@
 #include <QTextStream>
 #include <QFileInfo>
-#include "includeparser.h"
+#include <QList>
+#include <QException>
+#include <QDir>
 
-void printIncludeList(const Node *node, const int deepth, QTextStream &out);
+class ReadFileException : public QException
+{
+public:
+    ReadFileException(const QString &msg) { msg_ = msg; }
+
+    QString message() const { return msg_; }
+
+private:
+    QString msg_;
+};
+
+void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out);
+QStringList readFile(const QString &filepath);
 
 int main(int argc, char *argv[])
 {
@@ -14,39 +28,95 @@ int main(int argc, char *argv[])
         out << "Sie müssen eine Datei angeben!" << endl;
         return 0;
     }
-    QString filename(argv[1]);
-    IncludeParser p;
-    Node *root = p.parse(filename);
-    printIncludeList(root, -1, out);
-    out << endl;
+    QStringList patternList;
+    QString filepath(argv[1]);
+    if (!filepath.startsWith(QChar('/')))
+    {
+        filepath = QDir::currentPath() + filepath;
+    }
+    QFileInfo fileInfo(filepath);
+    filepath = fileInfo.absolutePath();
+    QString filename = fileInfo.fileName();
+    // Such pattern
+    for (int index=1; index<argc; ++index)
+    {
+        patternList << QString(argv[index]);
+    }
+    try {
+        parseFile(filepath, filename, patternList, 0, out);
+    } catch (const ReadFileException &e) {
+        out << "Fehler: " << e.message() << '\n';
+        return 1;
+    }
 
     return 0;
 }
 
 /*!
- * \brief Einfache Ausgabe aller Dateien die in includiert werden.
- * \param node
- * \param deepth
+ * \brief parseFile
+ * \param filepath
+ * \param patternList
+ * \param depth
  * \param out
  */
-void printIncludeList(const Node *node, const int deepth, QTextStream &out)
+void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out)
 {
-    if (deepth < 0)
+    // print filename
+    out << QString(depth, QChar(' ')) << filename << '\n';
+    // Search in file
+    QStringList content = readFile(filepath + '/' + filename);
+    for (QString line : content)
     {
-        out << "-------------------------------------------------------------------------\n";
-        out << "Starte mit Fle: " << node->fileName() << '\n';
-        out << "-------------------------------------------------------------------------\n";
+        int index = line.indexOf(QChar('#'));
+        if (index == 0)
+            continue;
+        if (index > 0 && index < line.length()-1)
+            line = line.left(index);
+//        out << "Line: " << line << '\n';
+        // Search for include
+        int pos = line.indexOf(QStringLiteral("@INCLUDE"));
+        if (pos >= 0)
+        {
+            pos+=8;
+            pos = line.indexOf(QChar('('), pos);
+            int end = line.indexOf(")", pos);
+//            out << "Schliessende Klammer: " << end << '\n';
+            if (line.at(pos+1) == QChar('\"')) pos+=1;
+            if (line.at(end-1) == QChar('\"')) end-=1;
+            QString filename = line.mid(pos+1, end-pos-1);
+//            out << "Filepfad: " << filename << '\n';
+            parseFile(filepath, filename, patternList, depth+2, out);
+        }
+        for (const QString &pattern : patternList)
+        {
+            if (line.indexOf(pattern) >= 0)
+            {
+                out << QString(depth, QChar(' ')) << line.trimmed() << '\n';
+            }
+        }
     }
-    else
+}
+
+/*!
+ * \brief Liest den ganzen Inhalt eines Files zeilenweise in eine QStringList.
+ * \param filepath
+ * \return
+ */
+QStringList readFile(const QString &filepath)
+{
+    QFile file(filepath);
+    if (!file.open(QIODevice::ReadOnly))
     {
-        QString space(deepth*2, ' ');
-        out << space << QFileInfo(node->fileName()).fileName();
-        if (!node->error().isEmpty())
-            out << "   (" << node->error() << ')';
-        out << '\n';
+        QFileInfo fileInfo(file);
+        throw ReadFileException(QString("Konnte Datei '%1' nicht öffnen!").arg(fileInfo.filePath()));
     }
-    for (const Node *n : node->childList())
+    QTextStream inStream(&file);
+    QStringList content;
+    while (!inStream.atEnd())
     {
-        printIncludeList(n, deepth+1, out);
+        content << inStream.readLine();
     }
+    file.close();
+
+    return content;
 }
