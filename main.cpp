@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out)
 {
     // print filename
-    out << "\033[34m" << QString(depth, QChar(' ')) << filename << "\033[0m\n";
+    out << "\033[34m" << depth << ": " << QString(depth*2, QChar(' ')) << filename << "\033[0m\n";
     // Search in file
     QFile file(filepath + '/' + filename);
     if (!file.open(QIODevice::ReadOnly))
@@ -92,13 +92,13 @@ void parseFile(const QString &filepath, const QString &filename, const QStringLi
             if (line.at(end-1) == QChar('\"')) end-=1;
             QString filename = line.mid(pos+1, end-pos-1);
 //            out << "Filepfad: " << filename << '\n';
-            parseFile(filepath, filename, patternList, depth+2, out);
+            parseFile(filepath, filename, patternList, depth+1, out);
         }
         for (const QString &pattern : patternList)
         {
             if (line.indexOf(pattern) >= 0)
             {
-                out << QString(depth, QChar(' ')) << line.trimmed() << '\n';
+                out << depth << ": " << QString(depth*2, QChar(' ')) << line.trimmed() << '\n';
             }
         }
     }
