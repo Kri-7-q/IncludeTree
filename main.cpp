@@ -79,7 +79,6 @@ void parseFile(const QString &filepath, const QString &filename, const QStringLi
             continue;
         if (index > 0 && index < line.length()-1)
             line = line.left(index);
-//        out << "Line: " << line << '\n';
         // Search for include
         int pos = line.indexOf(QStringLiteral("@INCLUDE"));
         if (pos >= 0)
@@ -87,11 +86,9 @@ void parseFile(const QString &filepath, const QString &filename, const QStringLi
             pos+=8;
             pos = line.indexOf(QChar('('), pos);
             int end = line.indexOf(")", pos);
-//            out << "Schliessende Klammer: " << end << '\n';
             if (line.at(pos+1) == QChar('\"')) pos+=1;
             if (line.at(end-1) == QChar('\"')) end-=1;
             QString filename = line.mid(pos+1, end-pos-1);
-//            out << "Filepfad: " << filename << '\n';
             parseFile(filepath, filename, patternList, depth+1, out);
         }
         for (const QString &pattern : patternList)
