@@ -1,50 +1,40 @@
-#include <QTextStream>
-#include <QFileInfo>
-#include <QList>
-#include <QException>
-#include <QDir>
+#include <string>
+#include <vector>
+#include <iostream>
+#include <fstream>
 
-class ReadFileException : public QException
-{
-public:
-    ReadFileException(const QString &msg) { msg_ = msg; }
 
-    QString message() const { return msg_; }
-
-private:
-    QString msg_;
-};
-
-void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out);
+void parseFile(const std::string &filepath, const std::string &filename, const std::vector<std::string> &patternList, int depth);
 
 int main(int argc, char *argv[])
 {
-    QTextStream out(stdout);
     // --------------------------------------------
     // Program arguments
     if (argc < 2)
     {
-        out << "Sie müssen eine Datei angeben!" << endl;
+        std::cerr << "Sie müssen eine Datei angeben!\n";
         return 0;
     }
-    QStringList patternList;
-    QString filepath(argv[1]);
-    if (!filepath.startsWith(QChar('/')))
+    std::vector<std::string> patternList;
+    std::string filepath(argv[1]);
+    if (filepath.at(0) != '/')
     {
-        filepath = QDir::currentPath() + filepath;
+        std::string appPath(argv[0]);
+        size_t pos = appPath.rfind('/');
+        filepath = appPath.substr(0, pos) + filepath;
     }
-    QFileInfo fileInfo(filepath);
-    filepath = fileInfo.absolutePath();
-    QString filename = fileInfo.fileName();
+    size_t index = filepath.rfind('/');
+    std::string filename = filepath.substr(index+1);
+    filepath = filepath.substr(0, index);
     // Such pattern
     for (int index=1; index<argc; ++index)
     {
-        patternList << QString(argv[index]);
+        patternList.push_back( std::string(argv[index]) );
     }
     try {
-        parseFile(filepath, filename, patternList, 0, out);
-    } catch (const ReadFileException &e) {
-        out << "Fehler: " << e.message() << '\n';
+        parseFile(filepath, filename, patternList, 0);
+    } catch (const std::exception &e) {
+        std::cerr << "Fehler: " << e.what() << '\n';
         return 1;
     }
 
@@ -58,46 +48,52 @@ int main(int argc, char *argv[])
  * \param depth
  * \param out
  */
-void parseFile(const QString &filepath, const QString &filename, const QStringList &patternList, int depth, QTextStream &out)
+void parseFile(const std::string &filepath, const std::string &filename, const std::vector<std::string> &patternList, int depth)
 {
     // print filename
-    out << "\033[34m" << depth << ": " << QString(depth*2, QChar(' ')) << filename << "\033[0m\n";
+    std::cerr << "\033[34m" << depth << ": " << std::string(depth*2, ' ') << filename << "\033[0m\n";
     // Search in file
-    QFile file(filepath + '/' + filename);
-    if (!file.open(QIODevice::ReadOnly))
+    std::fstream inStream;
+    std::string path = filepath + '/' + filename;
+    inStream.open(path.c_str());
+    if (! inStream.is_open())
     {
-        QFileInfo fileInfo(file);
-        throw ReadFileException(QString("Konnte Datei '%1' nicht öffnen!").arg(fileInfo.filePath()));
+        throw std::runtime_error("Konnte Datei '" + path + "' nicht öffnen!");
     }
-    QTextStream inStream(&file);
-    QStringList content;
-    while (!inStream.atEnd())
+    std::vector<std::string> content;
+    while (!inStream.eof())
     {
-        QString line = inStream.readLine();
-        int index = line.indexOf(QChar('#'));
+        char lineBuff[1024];
+        inStream.getline(lineBuff, 1024);
+        std::string line(lineBuff);
+        size_t index = line.find('#');
         if (index == 0)
             continue;
         if (index > 0 && index < line.length()-1)
-            line = line.left(index);
+            line = line.substr(0, index);
         // Search for include
-        int pos = line.indexOf(QStringLiteral("@INCLUDE"));
-        if (pos >= 0)
+        size_t pos = line.find("@INCLUDE");
+        if (pos != std::string::npos)
         {
             pos+=8;
-            pos = line.indexOf(QChar('('), pos);
-            int end = line.indexOf(")", pos);
-            if (line.at(pos+1) == QChar('\"')) pos+=1;
-            if (line.at(end-1) == QChar('\"')) end-=1;
-            QString filename = line.mid(pos+1, end-pos-1);
-            parseFile(filepath, filename, patternList, depth+1, out);
+            pos = line.find('(', pos);
+            int end = line.find(")", pos);
+            if (line.at(pos+1) == '\"') pos+=1;
+            if (line.at(end-1) == '\"') end-=1;
+            std::string filename = line.substr(pos+1, end-pos-1);
+            parseFile(filepath, filename, patternList, depth+1);
         }
-        for (const QString &pattern : patternList)
+        for (const std::string &pattern : patternList)
         {
-            if (line.indexOf(pattern) >= 0)
+            if (line.find(pattern) != std::string::npos)
             {
-                out << depth << ": " << QString(depth*2, QChar(' ')) << line.trimmed() << '\n';
+                size_t index = line.find_first_not_of(' ');
+                size_t endIndex = 0;
+                for (endIndex=line.length()-1; endIndex>index; --endIndex)
+                    if (line[endIndex] != ' ') break;
+                std::cerr << depth << ": " << std::string(depth*2, ' ') << line.substr(index, endIndex+1) << '\n';
             }
         }
     }
-    file.close();
+    inStream.close();
 }
